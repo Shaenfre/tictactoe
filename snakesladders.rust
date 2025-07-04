@@ -1,0 +1,169 @@
+use std::collections::HashMap;
+use std::io::{self, Write};
+
+// Value object for board position
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
+struct BoardPos(u8);
+
+impl BoardPos {
+    fn new(i: u8) -> Result<Self, String> {
+        if (1..=100).contains(&i) {
+            Ok(BoardPos(i))
+        } else {
+            Err(format!("BoardPos out of bounds: {}", i))
+        }
+    }
+}
+
+// Die roll type
+#[derive(Debug, Copy, Clone)]
+struct DieRoll(u8);
+
+impl DieRoll {
+    fn new(v: u8) -> Result<Self, String> {
+        if (1..=6).contains(&v) {
+            Ok(DieRoll(v))
+        } else {
+            Err(format!("DieRoll must be 1–6: {}", v))
+        }
+    }
+
+    fn roll() -> Self {
+        let v = (rand::random::<u8>() % 6) + 1;
+        DieRoll(v)
+    }
+}
+
+// Square enum
+#[derive(Debug)]
+enum Square {
+    Normal(BoardPos),
+    Snake(BoardPos, BoardPos),
+    Ladder(BoardPos, BoardPos),
+}
+
+impl Square {
+    fn dest(&self) -> BoardPos {
+        match self {
+            Square::Normal(p) => *p,
+            Square::Snake(_, to) => *to,
+            Square::Ladder(_, to) => *to,
+        }
+    }
+}
+
+// Board
+struct Board {
+    squares: HashMap<BoardPos, Square>,
+    final_square: BoardPos,
+}
+
+impl Board {
+    fn standard() -> Self {
+        let mut squares = HashMap::new();
+        for i in 1..=100 {
+            let p = BoardPos::new(i).unwrap();
+            squares.insert(p, Square::Normal(p));
+        }
+        macro_rules! add {
+            ($from:expr, $to:expr, $sq:expr) => {
+                squares.insert(BoardPos::new($from).unwrap(), $sq);
+            };
+        }
+        // Snakes
+        add!(16, 6, Square::Snake(BoardPos::new(16).unwrap(), BoardPos::new(6).unwrap()));
+        // ... etc ...
+        add!(98, 78, Square::Snake(BoardPos::new(98).unwrap(), BoardPos::new(78).unwrap()));
+        // Ladders
+        add!(1, 38, Square::Ladder(BoardPos::new(1).unwrap(), BoardPos::new(38).unwrap()));
+        // ... etc ...
+        add!(80, 100, Square::Ladder(BoardPos::new(80).unwrap(), BoardPos::new(100).unwrap()));
+
+        Board { squares, final_square: BoardPos::new(100).unwrap() }
+    }
+}
+
+// Player
+struct Player {
+    name: String,
+    position: BoardPos,
+}
+
+// GameState
+struct GameState {
+    board: Board,
+    players: Vec<Player>,
+    current: usize,
+}
+
+// Outcome enum
+enum Outcome {
+    Ongoing(GameState),
+    Win(String),
+}
+
+fn apply_move(mut gs: GameState, roll: DieRoll) -> GameState {
+    let idx = gs.current;
+    let mut p = &mut gs.players[idx];
+
+    let raw = p.position.0 + roll.0;
+    let new_pos = if raw > gs.board.final_square.0 {
+        gs.board.final_square
+    } else {
+        BoardPos::new(raw).unwrap()
+    };
+
+    let square = gs.board.squares.get(&new_pos).unwrap();
+    p.position = square.dest();
+    gs.current = (idx + 1) % gs.players.len();
+    gs
+}
+
+fn check_outcome(gs: GameState) -> Outcome {
+    for p in &gs.players {
+        if p.position == gs.board.final_square {
+            return Outcome::Win(p.name.clone());
+        }
+    }
+    Outcome::Ongoing(gs)
+}
+
+fn play(names: Vec<&str>) {
+    let mut gs = GameState {
+        board: Board::standard(),
+        players: names.into_iter().map(|n| Player {
+            name: n.to_string(),
+            position: BoardPos::new(1).unwrap(),
+        }).collect(),
+        current: 0,
+    };
+
+    let stdin = io::stdin();
+    loop {
+        match check_outcome(gs) {
+            Outcome::Win(winner) => {
+                println!("{} wins the game!", winner);
+                break;
+            }
+            Outcome::Ongoing(state) => {
+                gs = state;
+                let cur = &gs.players[gs.current];
+                print!("{}'s turn. Press Enter to roll...", cur.name);
+                io::stdout().flush().unwrap();
+                let mut buf = String::new();
+                stdin.read_line(&mut buf).unwrap();
+                let roll = DieRoll::roll();
+                println!("Rolled: {}", roll.0);
+                gs = apply_move(gs, roll);
+                let prev = (gs.current + gs.players.len() - 1) % gs.players.len();
+                println!("{} moves to {}", gs.players[prev].name, gs.players[prev].position.0);
+                println!("--------------------------------");
+            }
+        }
+    }
+}
+
+fn main() {
+    // Need rand crate: add `rand = "0.8"` to Cargo.toml
+    play(vec!["Alice", "Bob"]);
+}
