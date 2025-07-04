@@ -2,94 +2,105 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 public class SnakeAndLadders {
+    // Value object for board position, validated between 1 and 100
+    public static record BoardPos(int index) {
+        public BoardPos {
+            if (index < 1 || index > 100) {
+                throw new IllegalArgumentException("BoardPos out of bounds: " + index);
+            }
+        }
+    }
+
     // Dice roll outcome
-    record Dice(int value) {}
+    public static record Dice(int value) {}
 
     // Square type: Normal, Snake, Ladder
-    sealed interface Square permits Normal, Snake, Ladder {}
-    record Normal(int position) implements Square {}
-    record Snake(int start, int end) implements Square {}
-    record Ladder(int start, int end) implements Square {}
+    public sealed interface Square permits Normal, Snake, Ladder {}
+    public static record Normal(BoardPos position) implements Square {}
+    public static record Snake(BoardPos start, BoardPos end) implements Square {}
+    public static record Ladder(BoardPos start, BoardPos end) implements Square {}
 
     // Board representation
-    record Board(Map<Integer, Square> squares, int finalSquare) {}
+    public static record Board(Map<BoardPos, Square> squares, BoardPos finalSquare) {}
 
     // Player state
-    record Player(String name, int position) {}
+    public static record Player(String name, BoardPos position) {}
 
     // Game state
-    record GameState(Board board, List<Player> players, int currentPlayerIndex) {}
+    public static record GameState(Board board, List<Player> players, int currentPlayerIndex) {}
 
     // Outcome
-    sealed interface Outcome permits Ongoing, Win {}
-    record Ongoing(GameState state) implements Outcome {}
-    record Win(Player winner) implements Outcome {}
+    public sealed interface Outcome permits Ongoing, Win {}
+    public static record Ongoing(GameState state) implements Outcome {}
+    public static record Win(Player winner) implements Outcome {}
 
     // Build a standard 10x10 board with snakes and ladders
-    static Board createStandardBoard() {
+    public static Board createStandardBoard() {
         int size = 100;
-        Map<Integer, Square> map = new HashMap<>();
+        Map<BoardPos, Square> map = new HashMap<>();
         for (int i = 1; i <= size; i++) {
-            map.put(i, new Normal(i));
+            BoardPos pos = new BoardPos(i);
+            map.put(pos, new Normal(pos));
         }
         // Snakes
-        map.put(16, new Snake(16, 6));
-        map.put(47, new Snake(47, 26));
-        map.put(49, new Snake(49, 11));
-        map.put(56, new Snake(56, 53));
-        map.put(62, new Snake(62, 19));
-        map.put(64, new Snake(64, 60));
-        map.put(87, new Snake(87, 24));
-        map.put(93, new Snake(93, 73));
-        map.put(95, new Snake(95, 75));
-        map.put(98, new Snake(98, 78));
+        map.put(new BoardPos(16), new Snake(new BoardPos(16), new BoardPos(6)));
+        map.put(new BoardPos(47), new Snake(new BoardPos(47), new BoardPos(26)));
+        map.put(new BoardPos(49), new Snake(new BoardPos(49), new BoardPos(11)));
+        map.put(new BoardPos(56), new Snake(new BoardPos(56), new BoardPos(53)));
+        map.put(new BoardPos(62), new Snake(new BoardPos(62), new BoardPos(19)));
+        map.put(new BoardPos(64), new Snake(new BoardPos(64), new BoardPos(60)));
+        map.put(new BoardPos(87), new Snake(new BoardPos(87), new BoardPos(24)));
+        map.put(new BoardPos(93), new Snake(new BoardPos(93), new BoardPos(73)));
+        map.put(new BoardPos(95), new Snake(new BoardPos(95), new BoardPos(75)));
+        map.put(new BoardPos(98), new Snake(new BoardPos(98), new BoardPos(78)));
         // Ladders
-        map.put(1, new Ladder(1, 38));
-        map.put(4, new Ladder(4, 14));
-        map.put(9, new Ladder(9, 31));
-        map.put(21, new Ladder(21, 42));
-        map.put(28, new Ladder(28, 84));
-        map.put(36, new Ladder(36, 44));
-        map.put(51, new Ladder(51, 67));
-        map.put(71, new Ladder(71, 91));
-        map.put(80, new Ladder(80, 100));
-        return new Board(map, size);
+        map.put(new BoardPos(1), new Ladder(new BoardPos(1), new BoardPos(38)));
+        map.put(new BoardPos(4), new Ladder(new BoardPos(4), new BoardPos(14)));
+        map.put(new BoardPos(9), new Ladder(new BoardPos(9), new BoardPos(31)));
+        map.put(new BoardPos(21), new Ladder(new BoardPos(21), new BoardPos(42)));
+        map.put(new BoardPos(28), new Ladder(new BoardPos(28), new BoardPos(84)));
+        map.put(new BoardPos(36), new Ladder(new BoardPos(36), new BoardPos(44)));
+        map.put(new BoardPos(51), new Ladder(new BoardPos(51), new BoardPos(67)));
+        map.put(new BoardPos(71), new Ladder(new BoardPos(71), new BoardPos(91)));
+        map.put(new BoardPos(80), new Ladder(new BoardPos(80), new BoardPos(100)));
+        return new Board(map, new BoardPos(size));
     }
 
     // Roll a die: 1-6
-    static Dice rollDie() {
+    public static Dice rollDie() {
         return new Dice(new Random().nextInt(6) + 1);
     }
 
     // Apply a move for the current player
-    static GameState applyMove(GameState state, Dice dice) {
+    public static GameState applyMove(GameState state, Dice dice) {
         Board board = state.board();
         List<Player> players = new ArrayList<>(state.players());
         int idx = state.currentPlayerIndex();
         Player cur = players.get(idx);
-        int rawPos = cur.position() + dice.value();
-        int finalPos = Math.min(rawPos, board.finalSquare()); // cannot exceed final
 
-        // Check square type
+        // Calculate raw new position and cap at final square
+        BoardPos rawPos = new BoardPos(cur.position().index() + dice.value());
+        BoardPos finalPos = rawPos.index() > board.finalSquare().index()
+                             ? board.finalSquare()
+                             : rawPos;
+
+        // Check square type and get destination
         Square sq = board.squares().getOrDefault(finalPos, new Normal(finalPos));
-        int dest = switch (sq) {
+        BoardPos dest = switch (sq) {
             case Snake s -> s.end();
             case Ladder l -> l.end();
             case Normal n -> n.position();
         };
 
         players.set(idx, new Player(cur.name(), dest));
-
-        // Next player index
         int nextIdx = (idx + 1) % players.size();
-        
         return new GameState(board, players, nextIdx);
     }
 
     // Check outcome
-    static Outcome checkOutcome(GameState state) {
+    public static Outcome checkOutcome(GameState state) {
         for (Player p : state.players()) {
-            if (p.position() == state.board().finalSquare()) {
+            if (p.position().equals(state.board().finalSquare())) {
                 return new Win(p);
             }
         }
@@ -97,9 +108,12 @@ public class SnakeAndLadders {
     }
 
     // Game loop
-    static void play(List<String> playerNames) {
+    public static void play(List<String> playerNames) {
         Board board = createStandardBoard();
-        List<Player> players = playerNames.stream().map(n -> new Player(n, 0)).collect(Collectors.toList());
+        List<Player> players = playerNames.stream()
+            .map(n -> new Player(n, new BoardPos(0 + 1))) // start at 1? or define start position 1?
+            .collect(Collectors.toList());
+        // If start is square 1 as ladder, use new BoardPos(1). To start off-board, consider BoardPos(0) if allowed.
         GameState state = new GameState(board, players, 0);
         Scanner scanner = new Scanner(System.in);
 
@@ -116,7 +130,7 @@ public class SnakeAndLadders {
             System.out.printf("Rolled: %d\n", dice.value());
             state = applyMove(state, dice);
             Player updated = state.players().get((state.currentPlayerIndex() + players.size() - 1) % players.size());
-            System.out.printf("%s moves to %d\n", updated.name(), updated.position());
+            System.out.printf("%s moves to %d\n", updated.name(), updated.position().index());
             System.out.println("--------------------------------");
         }
     }
