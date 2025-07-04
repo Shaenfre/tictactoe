@@ -11,8 +11,14 @@ public class SnakeAndLadders {
         }
     }
 
-    // Dice roll outcome
-    public static record Dice(int value) {}
+    // Die roll outcome with validation
+    public static record DieRoll(int value) {
+        public DieRoll {
+            if (value < 1 || value > 6) {
+                throw new IllegalArgumentException("DieRoll must be between 1 and 6: " + value);
+            }
+        }
+    }
 
     // Square type: Normal, Snake, Ladder
     public sealed interface Square permits Normal, Snake, Ladder {}
@@ -67,19 +73,19 @@ public class SnakeAndLadders {
     }
 
     // Roll a die: 1-6
-    public static Dice rollDie() {
-        return new Dice(new Random().nextInt(6) + 1);
+    public static DieRoll rollDie() {
+        return new DieRoll(new Random().nextInt(6) + 1);
     }
 
     // Apply a move for the current player
-    public static GameState applyMove(GameState state, Dice dice) {
+    public static GameState applyMove(GameState state, DieRoll roll) {
         Board board = state.board();
         List<Player> players = new ArrayList<>(state.players());
         int idx = state.currentPlayerIndex();
         Player cur = players.get(idx);
 
         // Calculate raw new position and cap at final square
-        BoardPos rawPos = new BoardPos(cur.position().index() + dice.value());
+        BoardPos rawPos = new BoardPos(cur.position().index() + roll.value());
         BoardPos finalPos = rawPos.index() > board.finalSquare().index()
                              ? board.finalSquare()
                              : rawPos;
@@ -111,9 +117,8 @@ public class SnakeAndLadders {
     public static void play(List<String> playerNames) {
         Board board = createStandardBoard();
         List<Player> players = playerNames.stream()
-            .map(n -> new Player(n, new BoardPos(0 + 1))) // start at 1? or define start position 1?
+            .map(n -> new Player(n, new BoardPos(1))) // start at square 1
             .collect(Collectors.toList());
-        // If start is square 1 as ladder, use new BoardPos(1). To start off-board, consider BoardPos(0) if allowed.
         GameState state = new GameState(board, players, 0);
         Scanner scanner = new Scanner(System.in);
 
@@ -126,9 +131,9 @@ public class SnakeAndLadders {
             Player cur = state.players().get(state.currentPlayerIndex());
             System.out.printf("%s's turn. Press Enter to roll the die...\n", cur.name());
             scanner.nextLine();
-            Dice dice = rollDie();
-            System.out.printf("Rolled: %d\n", dice.value());
-            state = applyMove(state, dice);
+            DieRoll roll = rollDie();
+            System.out.printf("Rolled: %d\n", roll.value());
+            state = applyMove(state, roll);
             Player updated = state.players().get((state.currentPlayerIndex() + players.size() - 1) % players.size());
             System.out.printf("%s moves to %d\n", updated.name(), updated.position().index());
             System.out.println("--------------------------------");
